@@ -43,6 +43,8 @@ class Beat(BoxLayout):
         super().__init__()
         self.add_widget(Button())
 
+class CurrentProgressBar(Widget):
+    pass
 
 class Measure(BoxLayout):
     #orientation = 'vertical'
