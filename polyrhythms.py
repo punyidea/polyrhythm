@@ -8,6 +8,8 @@ from kivy.uix.widget import Widget
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
+from kivy.graphics import Color,Rectangle
+import random
 
 from collections import defaultdict
 
@@ -77,11 +79,66 @@ class ChangeableBoxLayout(BoxLayout):
 
     map_kept_attrs = {}
 
+    bg_color = 0,0,0
+    bg_color_args = {'mode':'hsv'}
+
     def __init__(self, no_repeated_classes=None,
                   repeated_class_args = (),repeated_class_kwargs=None,
                   extra_classes_args = None,extra_classes_kwargs=None,
+                 bg_color = None, bg_color_args = {},
                 **kwargs):
 
+
+        self.process_inputs_against_class_instances(
+                                               no_repeated_classes,
+                                               repeated_class_args,
+                                               repeated_class_kwargs,
+                                               extra_classes_args,
+                                               extra_classes_kwargs,
+                                               kwargs
+                                                )
+
+        # Now, run the ChangeableBoxLayout initiation.
+        # Don't break built-in functionality.
+        super(ChangeableBoxLayout,self).__init__(**kwargs)
+
+        ## possibly implement error checking for arguments, but it's non-trivial.
+        ## if you get an error from here,
+        ## it's likely because your lists do not match up.
+        self.add_repeated_class_widgets()
+        self.add_extra_classes()
+
+        self.ready_for_update = False
+
+        #self.setup_background(bg_color,bg_color_args)
+
+    def add_repeated_class_widgets(self):
+
+        #first add all of the repeated class elements
+        for i in range(self.times_rpt_class):
+            # noinspection PyArgumentList
+            self.add_widget(self.repeated_class(
+                *self.rpt_args,**self.rpt_kwargs
+                )
+            )
+
+    def add_extra_classes(self):
+         #then add all of the extra class elements, with desired arguments
+        for extra_class in self.extra_classes:
+            self.add_widget(extra_class(
+                *self.extra_args[extra_class],
+                **self.extra_kwargs[extra_class]
+                )
+            )
+
+    def process_inputs_against_class_instances(self,
+                                               no_repeated_classes,
+                                               repeated_class_args,
+                                               repeated_class_kwargs,
+                                               extra_classes_args,
+                                               extra_classes_kwargs,
+                                               kwargs
+                                                ):
         # If we need to do anything special with the inputs, do that here,
         # before we feed the kwargs through to kivy's function.
         special_handling_dict = \
@@ -101,7 +158,7 @@ class ChangeableBoxLayout(BoxLayout):
                 (
                     no_repeated_classes    ,
                     repeated_class_args    ,
-                    repeated_class_kwargs,
+                    repeated_class_kwargs  ,
                     extra_classes_args     ,
                     extra_classes_kwargs   ,
                 ),
@@ -109,58 +166,39 @@ class ChangeableBoxLayout(BoxLayout):
                 )
              )
 
-
-        # Now, run the ChangeableBoxLayout initiation.
-        # Don't break built-in functionality.
-        super(ChangeableBoxLayout,self).__init__(**kwargs)
-
-
-
-
-        times_rpt_class = choose_new_or_old(
+        self.times_rpt_class = choose_new_or_old(
                             no_repeated_classes,self.no_repeated_classes)
 
-
         #process the arguments for the repeated class
-        self.rpt_args = rpt_args = repeated_class_args + self.repeated_class_args
+        self.rpt_args =  repeated_class_args + self.repeated_class_args
         if repeated_class_kwargs:
-            self.rpt_kwargs = rpt_kwargs = merge_dicts(self.repeated_class_kwargs,
+            self.rpt_kwargs =  merge_dicts(self.repeated_class_kwargs,
                                            repeated_class_kwargs)
         else:
-            self.rpt_kwargs = rpt_kwargs = self.repeated_class_kwargs
+            self.rpt_kwargs =  self.repeated_class_kwargs
 
         #Process the arguments for the extra classes.
         if extra_classes_args:
-            self.extra_args = extra_args = merge_dicts(self.extra_classes_args,
+            self.extra_args =  merge_dicts(self.extra_classes_args,
                                            extra_classes_args)
         else:
-            self.extra_args = extra_args = self.extra_classes_args
+            self.extra_args =  self.extra_classes_args
         if extra_classes_kwargs:
-            self.extra_kwargs = extra_kwargs = merge_dicts(self.extra_classes_kwargs,
+            self.extra_kwargs =  merge_dicts(self.extra_classes_kwargs,
                                                extra_classes_kwargs)
         else:
-            self.extra_kwargs = extra_kwargs = self.extra_classes_kwargs
+            self.extra_kwargs =  self.extra_classes_kwargs
 
+    def setup_background(self,bg_color,bg_color_args):
+        background = bg_color if bg_color else self.bg_color
+        bg_kwargs = self.bg_color_args.copy()
+        bg_kwargs.update(bg_color_args)
 
-        ## possibly implement error checking for arguments, but it's non-trivial.
-        ## if you get an error from here,
-        ## it's likely because your lists do not match up.
+        with self.canvas.before:
+            Color(*background,**bg_kwargs)
+            self.rect = Rectangle(size = self.size,pos=self.pos)
 
-
-        #first add all of the repeated class elements
-        for i in range(times_rpt_class):
-            # noinspection PyArgumentList
-            self.add_widget(self.repeated_class(
-                *rpt_args,**rpt_kwargs
-                )
-            )
-
-        #then add all of the extra class elements, with desired arguments
-        for extra_class in self.extra_classes:
-            self.add_widget(extra_class(
-                *extra_args[extra_class],**extra_kwargs[extra_class]
-                )
-            )
+        self.bind(size=self._update_rect,pos = self._update_rect)
 
     def handle_spec_inputs_for_init(self,kwargs):
         '''
@@ -175,6 +213,25 @@ class ChangeableBoxLayout(BoxLayout):
                 return_dict[arg] = kwargs.pop(arg)
 
         return return_dict
+
+    def _update_rect(self,instance,value):
+        self.rect.pos = instance.pos
+        self.rect.size = instance.size
+
+    def update_grid_size(self,new_no,new_args):
+        '''
+
+        :param new_no: The new number of children it needs
+        :param new_args: dict or NoneType
+        :return:
+        '''
+        for child in self.children[:]:
+            pass
+
+
+    def on_touch_up(self, touch):
+        self.ready_for_update = False
+        super(ChangeableBoxLayout,self).on_touch_up(touch)
 
     def spec_inputs_to_final_inputs(self,special_handling_dict,kwargs):
         '''
@@ -196,6 +253,7 @@ class ChangeableBoxLayout(BoxLayout):
             return_dict[self.map_kept_attrs[field]] = value
         return return_dict
 
+
 class RecursiveBoxLayout(ChangeableBoxLayout):
     recursive_kw_args ={}
     def spec_inputs_to_final_inputs(self,special_handling_dict,kwargs):
@@ -213,7 +271,11 @@ class SubBeat(Button):
 class Beat(RecursiveBoxLayout):
     repeated_class = SubBeat
     no_repeated_classes = 1
-    #repeated_class_kwargs = {'orientation':'horizontal','spacing':10}
+    repeated_class_kwargs = {'orientation':'horizontal',
+                             'spacing':10,
+                             #'size_hint':(1,.9)
+                             }
+
     #repeated_class_args = ()
     extra_classes = ()
     extra_classes_kwargs = defaultdict(tuple)
@@ -222,6 +284,30 @@ class Beat(RecursiveBoxLayout):
     desired_kept_vars = ('no_subbeats',)
     map_kept_attrs = {'no_subbeats': 'no_repeated_classes'}
 
+    def add_repeated_class_widgets(self):
+        for i in range(self.times_rpt_class):
+            # noinspection PyArgumentList
+            self.add_widget(self.repeated_class(
+                background_color = (random.random(),.8,.8),
+                *self.rpt_args,**self.rpt_kwargs
+
+                )
+            )
+
+    def on_touch_down(self, touch):
+
+        if touch.is_double_tap:
+            self.ready_for_update = True
+            self.touch_coords =  touch.x,touch.y
+        else:
+            super(ChangeableBoxLayout,self).on_touch_down(touch)
+
+
+    def on_touch_move(self, touch):
+        if self.ready_for_update:
+            prev_x,prev_y = self.touch_coords
+        else:
+            super(ChangeableBoxLayout,self).on_touch_move(touch)
 
 class Instrument(RecursiveBoxLayout):
 
@@ -276,7 +362,7 @@ class RhythmMaker(FloatLayout):
             no_beats = self.no_beats,
             no_subbeats = self.no_subbeats,
             orientation='vertical',
-            spacing=10
+            spacing=5
         ))
 
 
