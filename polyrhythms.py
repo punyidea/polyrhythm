@@ -90,6 +90,8 @@ class ChangeableBoxLayout(BoxLayout):
         if bg_color_args is None:
             bg_color_args = {}
 
+        self.touch_coords = None
+
         self.process_inputs_against_class_instances(
                                                no_repeated_classes,
                                                repeated_class_args,
@@ -305,49 +307,44 @@ class Beat(RecursiveBoxLayout):
     desired_kept_vars = ('no_subbeats',)
     map_kept_attrs = {'no_subbeats': 'no_repeated_classes'}
 
-    def setup_background(self,bg_color,bg_color_args):
-        background = bg_color if bg_color else self.bg_color
-        bg_kwargs = self.bg_color_args.copy()
-        bg_kwargs.update(bg_color_args)
-
-        with self.canvas.before:
-            Color(*background,**bg_kwargs)
-            self.rect = Rectangle(size = self.size,pos=self.pos)
-
-        self.bind(size=self._update_rect,pos = self._update_rect)
-        self.touch_coords = None
-
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
             if touch.is_double_tap:
-                self.ready_for_update = True
-                self.touch_coords =  touch.x,touch.y
+                return self.prepare_touch_move(touch)
 
-                for child in self.children[:]:
-                    if child.dispatch('on_touch_down', touch):
-                        break
-                return True
 
         super(ChangeableBoxLayout,self).on_touch_down(touch)
+
+    def prepare_touch_move(self,touch):
+        self.ready_for_update = True
+        self.touch_coords =  touch.x,touch.y
+        self.prev_grid = self.times_rpt_class
+
+        for child in self.children[:]:
+            if child.dispatch('on_touch_down', touch):
+                break
+        return True
 
 
     def on_touch_move(self, touch):
         if self.touch_coords and self.collide_point(*self.touch_coords):
             if self.ready_for_update:
                 prev_x,prev_y = self.touch_coords
-                touch_diff = touch.y-prev_y
-                graininess = self.height/4
-                if abs(touch_diff)>(graininess):
-                    new_grid_size = int(self.times_rpt_class +(touch_diff//graininess))
+                graininess = self.height/3
+                scaled_touch_diff = (touch.y-prev_y)-graininess/2
+                if abs(scaled_touch_diff)>=graininess/2:
+                    new_grid_size = int(self.prev_grid +
+                                        (scaled_touch_diff//graininess))
                     new_grid_size = max(min(new_grid_size,6),1)
-                    self.update_grid_size(new_grid_size)
+                    if new_grid_size!= self.times_rpt_class:
+                        self.update_grid_size(new_grid_size)
                     return True
 
 
             super(ChangeableBoxLayout,self).on_touch_move(touch)
 
-class Instrument(RecursiveBoxLayout):
+class Instrument(Beat):
 
     no_repeated_classes = 4
 
@@ -368,7 +365,13 @@ class Instrument(RecursiveBoxLayout):
             *self.rpt_args,**self.rpt_kwargs
         )
 
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            if touch.is_triple_tap:
+                return self.prepare_touch_move(touch)
 
+
+        super(ChangeableBoxLayout,self).on_touch_down(touch)
 
 
 
@@ -397,8 +400,8 @@ class Measure(RecursiveBoxLayout):
 
 class RhythmMaker(FloatLayout):
     no_instruments = 4
-    no_beats = 2
-    no_subbeats = 5
+    no_beats = 4
+    no_subbeats = 4
     def __init__(self):
         super().__init__()
 
