@@ -8,7 +8,8 @@ from kivy.uix.widget import Widget
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.togglebutton import ToggleButton
-from kivy.graphics import Color,Rectangle
+from kivy.graphics import Color,Rectangle,Triangle
+from kivy.core.audio import SoundLoader
 import random
 
 from collections import defaultdict
@@ -291,6 +292,7 @@ class SubBeat(ToggleButton):
     #def on_touch_down(self, touch):
     pass
 
+
 class Beat(RecursiveBoxLayout):
     repeated_class = SubBeat
     no_repeated_classes = 1
@@ -311,6 +313,7 @@ class Beat(RecursiveBoxLayout):
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
             if touch.is_double_tap:
+
                 return self.prepare_touch_move(touch)
 
 
@@ -323,8 +326,7 @@ class Beat(RecursiveBoxLayout):
 
         for child in self.children[:]:
             if child.dispatch('on_touch_down', touch):
-                break
-        return True
+                return True
 
 
     def on_touch_move(self, touch):
@@ -425,7 +427,33 @@ class CurrentProgressBar(Widget):
     pass
 
 
+DEBUG_SOUND = False
 
+class Sounds(object):
+
+    def __init__(self):
+        self.sounds = {}
+        super(Sounds, self).__init__()
+
+    def __getattr__(self, attr, volume=None):
+        if not attr.startswith('play_'):
+            return object.__getattribute__(self, attr)
+        f = attr.split('play_')[1]
+        sounds = getattr(self, 'sounds')
+        loaded = sounds.get(f, [])
+        ready = None
+        for l in loaded:
+            if l.state == 'stop':
+                ready = l
+                break
+        if ready == None:
+            ready = SoundLoader.load('audio/' + f + '.mp3')
+            sounds[f] = loaded
+            loaded.append(ready)
+        # if platform == 'android' or DEBUG_SOUND:
+        #     return ready.play
+        # else:
+        return lambda *args: None
 
 
 
@@ -433,6 +461,8 @@ class PolyRhythmApp(App):
 
     def build(self):
         self.root= root = RhythmMaker()
+        sounder = Sounds()
+        sounder.play_boobs()
         return root
 
 def choose_new_or_old(new,old):
