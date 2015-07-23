@@ -1,6 +1,6 @@
 
 from __future__ import print_function
-from builtins import super
+
 
 __author__ = 'vsp'
 from kivy.app import App
@@ -10,7 +10,9 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.togglebutton import ToggleButton
 from kivy.graphics import Color,Rectangle,Triangle
 from kivy.core.audio import SoundLoader
-import random
+from kivy.clock import Clock
+from kivy.vector import Vector
+import random,time
 
 from collections import defaultdict
 
@@ -33,6 +35,26 @@ def merge_iters(old_iter,new_iter):
     :return:
     '''
     return old_iter + new_iter
+
+
+class Timer(object):
+    '''
+    debugging purposes, found the timer. Just put the material in a with block
+    (e.g. "with Timer() as time:")   and it will tell you automatically when the code finishes
+    '''
+    def __init__(self, name=None):
+        self.name = name
+
+    def __enter__(self):
+        self.start = time.time()
+
+    # noinspection PyUnusedLocal
+    def __exit__(self, exc_type, value, exc_traceback):
+        name = ''
+        if self.name:
+            name = str(self.name)
+        print(name, 'Elapsed: ', repr(time.time() - self.start), 'secs.')
+
 
 class KwCleanUp(object):
     '''
@@ -276,6 +298,11 @@ class ChangeableBoxLayout(BoxLayout):
             return_dict[self.map_kept_attrs[field]] = value
         return return_dict
 
+    def dispatch_update(self,*args,**kwargs):
+
+        for child in self.rpt_widgets[:]:
+            child.dispatch_update(*args,**kwargs)
+
 
 class RecursiveBoxLayout(ChangeableBoxLayout):
     recursive_kw_args ={}
@@ -289,8 +316,28 @@ class RecursiveBoxLayout(ChangeableBoxLayout):
 
 
 class SubBeat(ToggleButton):
-    #def on_touch_down(self, touch):
-    pass
+    DEBUG=False
+
+    def __init__(self,sound_file=None,*args,**kwargs):
+        self.is_playing=False
+        self.sound_file = 'audio/{}'.format(sound_file)
+        self.sound = None
+        super(SubBeat, self).__init__(*args,**kwargs)
+
+    def play_sound(self,bar_x):
+        if self.state=='down' and self.collide_point(bar_x,self.y):
+
+
+            if not self.is_playing and self.sound:
+                self.is_playing=True
+                return self.sound.play()
+        else:
+            self.is_playing=False
+
+    def on_press(self):
+        if self.state=='down' and self.sound_file:
+            self.sound = SoundLoader.load(self.sound_file)
+
 
 
 class Beat(RecursiveBoxLayout):
@@ -308,14 +355,13 @@ class Beat(RecursiveBoxLayout):
 
     desired_kept_vars = ('no_subbeats',)
     map_kept_attrs = {'no_subbeats': 'no_repeated_classes'}
+    recursive_kw_args = ('sound_file',)
 
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
             if touch.is_double_tap:
-
                 return self.prepare_touch_move(touch)
-
 
         super(ChangeableBoxLayout,self).on_touch_down(touch)
 
@@ -325,9 +371,16 @@ class Beat(RecursiveBoxLayout):
         self.prev_grid = self.times_rpt_class
 
         for child in self.children[:]:
+            #allow clicks to "undo" themselves (toggle buttons)
             if child.dispatch('on_touch_down', touch):
                 return True
+        else:
+            return True
 
+    def dispatch_update(self,*args,**kwargs):
+
+        for subbeat in self.rpt_widgets[:]:
+            subbeat.play_sound(bar_x=args[0])
 
     def on_touch_move(self, touch):
         if self.touch_coords and self.collide_point(*self.touch_coords):
@@ -343,8 +396,8 @@ class Beat(RecursiveBoxLayout):
                         self.update_grid_size(new_grid_size)
                     return True
 
+        super(ChangeableBoxLayout,self).on_touch_move(touch)
 
-            super(ChangeableBoxLayout,self).on_touch_move(touch)
 
 class Instrument(Beat):
 
@@ -360,7 +413,7 @@ class Instrument(Beat):
 
     desired_kept_vars = ('no_beats',)#'no_subbeats')
     map_kept_attrs = {'no_beats': 'no_repeated_classes'}
-    recursive_kw_args = ('no_subbeats',)
+    recursive_kw_args = ('no_subbeats','sound_file')
     def single_rpt_class(self):
         return self.repeated_class(
             bg_color = (random.random(),0.4,0.92),
@@ -372,9 +425,10 @@ class Instrument(Beat):
             if touch.is_triple_tap:
                 return self.prepare_touch_move(touch)
 
-
         super(ChangeableBoxLayout,self).on_touch_down(touch)
 
+    def dispatch_update(self,*args,**kwargs):
+        ChangeableBoxLayout.dispatch_update(self,*args,**kwargs)
 
 
 class Measure(RecursiveBoxLayout):
@@ -392,43 +446,75 @@ class Measure(RecursiveBoxLayout):
     map_kept_attrs = {'no_instruments': 'no_repeated_classes'}
     recursive_kw_args = ('no_beats','no_subbeats')
 
+    def __init__(self,inst_sounds=None,**kwargs):
+
+        if inst_sounds:
+            self.inst_sounds = inst_sounds
+        else:
+            self.inst_sounds = []
+        super(Measure,self).__init__(**kwargs)
+
+    def add_repeated_class_widgets(self):
+        for inst_sound in self.inst_sounds:
+            inst = Instrument(sound_file=inst_sound,
+                           *self.rpt_args,**self.rpt_kwargs)
+            self.add_widget(inst)
+            self.rpt_widgets.append(inst)
 
 
-    # def __init__(self,no_instruments=4,no_beats=4,**kwargs):
-    #     #initialize the layout normally
-    #     super().__init__(no_repeated_classes=no_instruments,
-    #                      repeated_class_kwargs={'no_repeated_classes':no_beats},
-    #                      **kwargs)
 
 class RhythmMaker(FloatLayout):
+    adj_const = 1.0/60.0 #60 seconds in a minute, tempo is in measures / min
     no_instruments = 4
+    tempo = 30
     no_beats = 4
-    no_subbeats = 4
+    no_subbeats = 1
+    inst_list = ['hat3.mp3',
+                 'tom3.mp3',
+                 'snare3.mp3','kick3.mp3']
     def __init__(self):
-        super().__init__()
+        super(RhythmMaker,self).__init__()
 
-        self.add_widget(
-            Measure(
+        self.measure = Measure(
+            inst_sounds=self.inst_list,
             no_instruments=self.no_instruments,
             no_beats = self.no_beats,
             no_subbeats = self.no_subbeats,
             orientation='vertical',
             spacing=5
-        ))
+        )
+
+        self.add_widget(self.measure)
+
+        self.progress_bar= prog_bar = CurrentProgressBar(
+            pos = (0,0)
+        )
+
+        self.add_widget(
+            prog_bar
+        )
+
+
+    def update(self,dt):
+        dist_moved = dt*self.tempo*self.width*self.adj_const
+        self.progress_bar.move(dist_moved)
+
+        if self.progress_bar.x > self.width+10:
+            self.progress_bar.x %= self.width+10
+
+        self.measure.dispatch_update(self.progress_bar.x)
 
 
 class Menu(Widget):
     pass
 
 
-
-
 class CurrentProgressBar(Widget):
-    pass
+    def move(self,dist_moved):
+        self.pos =  Vector(dist_moved,0.0) + self.pos
 
 
-DEBUG_SOUND = False
-
+DEBUG_SOUND = True
 class Sounds(object):
 
     def __init__(self):
@@ -447,13 +533,16 @@ class Sounds(object):
                 ready = l
                 break
         if ready == None:
-            ready = SoundLoader.load('audio/' + f + '.mp3')
+            ready = SoundLoader.load('audio/' + f + '.wav')
             sounds[f] = loaded
             loaded.append(ready)
-        # if platform == 'android' or DEBUG_SOUND:
-        #     return ready.play
-        # else:
-        return lambda *args: None
+        if DEBUG_SOUND:
+            ready.play()
+            while ready.state == 'play':
+                pass
+            return ready.play
+        else:
+            return lambda *args: None
 
 
 
@@ -461,8 +550,7 @@ class PolyRhythmApp(App):
 
     def build(self):
         self.root= root = RhythmMaker()
-        sounder = Sounds()
-        sounder.play_boobs()
+        Clock.schedule_interval(root.update, 1.0/120.0)
         return root
 
 def choose_new_or_old(new,old):
