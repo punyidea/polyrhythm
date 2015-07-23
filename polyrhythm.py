@@ -339,7 +339,6 @@ class SubBeat(ToggleButton):
             self.sound = SoundLoader.load(self.sound_file)
 
 
-
 class Beat(RecursiveBoxLayout):
     repeated_class = SubBeat
     no_repeated_classes = 1
