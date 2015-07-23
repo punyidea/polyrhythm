@@ -500,8 +500,8 @@ class RhythmMaker(FloatLayout):
 
         if self.progress_bar.x > self.width+10:
             self.progress_bar.x %= self.width+10
-
-        self.measure.dispatch_update(self.progress_bar.x)
+        with Timer() as woop:
+            self.measure.dispatch_update(self.progress_bar.x)
 
 
 class Menu(Widget):
@@ -549,7 +549,7 @@ class PolyRhythmApp(App):
 
     def build(self):
         self.root= root = RhythmMaker()
-        Clock.schedule_interval(root.update, 1.0/120.0)
+        Clock.schedule_interval(root.update, 1.0/40.0)
         return root
 
 def choose_new_or_old(new,old):
